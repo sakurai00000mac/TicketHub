@@ -7,7 +7,7 @@ import type { IssuePriority } from '../types';
 export function IssueNewPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { addIssue } = useIssueStore();
+  const { addIssue, getProjectIssues } = useIssueStore();
   const { getProject, incrementIssueCounter } = useProjectStore();
 
   const project = projectId ? getProject(projectId) : undefined;
@@ -17,10 +17,19 @@ export function IssueNewPage() {
   const [typeId, setTypeId] = useState(project?.issueTypes[0]?.id ?? '');
   const [statusId, setStatusId] = useState(project?.issueStatuses[0]?.id ?? '');
   const [priority, setPriority] = useState<IssuePriority>('medium');
+  const [parentId, setParentId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
 
   if (!projectId || !project) return null;
+
+  const allIssues = getProjectIssues(projectId);
+
+  const setToday = (setter: (date: string) => void) => {
+    const d = new Date();
+    const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setter(formatted);
+  };
 
   const handleSubmit = () => {
     if (!title.trim()) return;
@@ -37,7 +46,7 @@ export function IssueNewPage() {
       statusId,
       priority,
       assigneeId: null,
-      parentId: null,
+      parentId: parentId || null,
       startDate: startDate ? new Date(startDate).getTime() : null,
       dueDate: dueDate ? new Date(dueDate).getTime() : null,
       order: 0,
@@ -74,6 +83,15 @@ export function IssueNewPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div className="form-group">
+          <label>ステータス</label>
+          <select value={statusId} onChange={(e) => setStatusId(e.target.value)}>
+            {project.issueStatuses.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
           <label>種別</label>
           <select value={typeId} onChange={(e) => setTypeId(e.target.value)}>
             {project.issueTypes.map((t) => (
@@ -92,21 +110,42 @@ export function IssueNewPage() {
         </div>
 
         <div className="form-group">
-          <label>ステータス</label>
-          <select value={statusId} onChange={(e) => setStatusId(e.target.value)}>
-            {project.issueStatuses.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+          <label>親課題</label>
+          <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">なし</option>
+            {allIssues.filter(i => !i.parentId).map((i) => (
+              <option key={i.id} value={i.id}>{i.key} {i.title}</option>
             ))}
           </select>
         </div>
 
         <div className="form-group">
-          <label>開始日</label>
+          <label>
+            開始日
+            <button
+              type="button"
+              className="btn btn-xs btn-outline"
+              style={{ marginLeft: '8px', padding: '2px 6px', fontSize: '11px' }}
+              onClick={() => setToday(setStartDate)}
+            >
+              今日
+            </button>
+          </label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
 
         <div className="form-group">
-          <label>期限</label>
+          <label>
+            期限
+            <button
+              type="button"
+              className="btn btn-xs btn-outline"
+              style={{ marginLeft: '8px', padding: '2px 6px', fontSize: '11px' }}
+              onClick={() => setToday(setDueDate)}
+            >
+              今日
+            </button>
+          </label>
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </div>
       </div>

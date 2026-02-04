@@ -1,4 +1,4 @@
-import type { Project, Page, Issue, IssueComment, Document } from '../types';
+import type { Project, Page, Issue, IssueComment, IssueHistory, Document } from '../types';
 
 // ============================================
 // 汎用LocalStorageアダプタ
@@ -22,6 +22,7 @@ const KEYS = {
   pages: 'wiki-pages',
   issues: 'wiki-issues',
   issueComments: 'wiki-issue-comments',
+  issueHistory: 'wiki-issue-history',
   documents: 'wiki-documents',
 } as const;
 
@@ -37,6 +38,9 @@ export const saveIssues = (data: Issue[]) => save(KEYS.issues, data);
 export const loadIssueComments = () => load<IssueComment>(KEYS.issueComments);
 export const saveIssueComments = (data: IssueComment[]) => save(KEYS.issueComments, data);
 
+export const loadIssueHistory = () => load<IssueHistory>(KEYS.issueHistory);
+export const saveIssueHistory = (data: IssueHistory[]) => save(KEYS.issueHistory, data);
+
 export const loadDocuments = () => load<Document>(KEYS.documents);
 export const saveDocuments = (data: Document[]) => save(KEYS.documents, data);
 
@@ -50,6 +54,7 @@ export function exportToFile(): void {
     pages: loadPages(),
     issues: loadIssues(),
     issueComments: loadIssueComments(),
+    issueHistory: loadIssueHistory(),
     documents: loadDocuments(),
     exportedAt: new Date().toISOString(),
   };
@@ -68,6 +73,7 @@ export interface ImportData {
   pages: Page[];
   issues?: Issue[];
   issueComments?: IssueComment[];
+  issueHistory?: IssueHistory[];
   documents?: Document[];
 }
 
@@ -82,6 +88,7 @@ export async function importFromFile(file: File): Promise<ImportData> {
     pages: data.pages,
     issues: data.issues ?? [],
     issueComments: data.issueComments ?? [],
+    issueHistory: data.issueHistory ?? [],
     documents: data.documents ?? [],
   };
 }

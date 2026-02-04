@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useIssueStore } from '../stores/issueStore';
 import { useProjectStore } from '../stores/projectStore';
 import { FiPlus, FiChevronRight, FiChevronDown } from 'react-icons/fi';
+import { useIssueFilter } from '../hooks/useIssueFilter';
+import { IssueFilter } from '../components/common/IssueFilter';
 import type { Issue } from '../types';
 
 // ツリー構造を構築
@@ -20,6 +22,13 @@ export function IssuesPage() {
   const navigate = useNavigate();
   const { getProjectIssues } = useIssueStore();
   const { getProject } = useProjectStore();
+  const {
+    keyword, setKeyword,
+    typeId, setTypeId,
+    statusId, setStatusId,
+    priority, setPriority,
+    filterIssues
+  } = useIssueFilter();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggleCollapse = useCallback((id: string, e: React.MouseEvent) => {
@@ -30,11 +39,13 @@ export function IssuesPage() {
   if (!projectId) return null;
 
   const issues = getProjectIssues(projectId);
+  const filteredIssues = filterIssues(issues);
   const project = getProject(projectId);
-  const tree = buildTree(issues);
+  const tree = buildTree(filteredIssues);
 
   const renderRow = (issue: Issue, depth: number, hasChildren: boolean) => {
     const status = project?.issueStatuses.find((s) => s.id === issue.statusId);
+    const type = project?.issueTypes.find((t) => t.id === issue.typeId);
     const isCollapsed = collapsed[issue.id];
 
     return (
@@ -53,6 +64,20 @@ export function IssuesPage() {
               {isCollapsed ? <FiChevronRight size={16} /> : <FiChevronDown size={16} />}
             </button>
           ) : null}
+        </td>
+        <td>
+          <span
+            className="status-badge"
+            style={{
+              background: type?.color ?? '#6b7280',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {type?.name ?? '不明'}
+          </span>
         </td>
         <td><span className="issue-key">{issue.key}</span></td>
         <td>{issue.title}</td>
@@ -111,28 +136,44 @@ export function IssuesPage() {
           <FiPlus /> 課題を追加
         </button>
       </div>
-      {issues.length === 0 ? (
+
+      <IssueFilter
+        project={project!}
+        keyword={keyword}
+        setKeyword={setKeyword}
+        typeId={typeId}
+        setTypeId={setTypeId}
+        statusId={statusId}
+        setStatusId={setStatusId}
+        priority={priority}
+        setPriority={setPriority}
+      />
+
+      {filteredIssues.length === 0 ? (
         <div className="empty-state">
           <h2>課題がありません</h2>
           <p>「課題を追加」ボタンから最初の課題を作成してください。</p>
         </div>
       ) : (
-        <table className="issue-table">
-          <thead>
-            <tr>
-              <th className="issue-toggle-th"></th>
-              <th>キー</th>
-              <th>件名</th>
-              <th>ステータス</th>
-              <th>優先度</th>
-              <th>開始日</th>
-              <th>期限</th>
-            </tr>
-          </thead>
-          <tbody>
-            {renderTree(tree, 0)}
-          </tbody>
-        </table>
+        <div className="issue-table-wrapper">
+          <table className="issue-table">
+            <thead>
+              <tr>
+                <th className="issue-toggle-th"></th>
+                <th>種別</th>
+                <th>キー</th>
+                <th>件名</th>
+                <th>ステータス</th>
+                <th>優先度</th>
+                <th>開始日</th>
+                <th>期限</th>
+              </tr>
+            </thead>
+            <tbody>
+              {renderTree(tree, 0)}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

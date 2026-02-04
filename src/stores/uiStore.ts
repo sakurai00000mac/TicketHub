@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import type { ImportData } from '../utils/storage';
 import {
-  saveProjects, savePages, saveIssues, saveIssueComments, saveDocuments,
+  saveProjects, savePages, saveIssues, saveIssueComments, saveIssueHistory, saveDocuments,
 } from '../utils/storage';
 import { useProjectStore } from './projectStore';
 import { useWikiStore } from './wikiStore';
 import { useIssueStore } from './issueStore';
+import { useDocumentStore } from './documentStore';
 
 interface UIState {
   sidebarOpen: boolean;
@@ -27,6 +28,7 @@ export const useUIStore = create<UIState>((set) => ({
     savePages(data.pages);
     saveIssues(data.issues ?? []);
     saveIssueComments(data.issueComments ?? []);
+    saveIssueHistory(data.issueHistory ?? []);
     saveDocuments(data.documents ?? []);
 
     useProjectStore.setState({ projects: data.projects });
@@ -34,6 +36,8 @@ export const useUIStore = create<UIState>((set) => ({
     useIssueStore.setState({
       issues: data.issues ?? [],
       comments: data.issueComments ?? [],
+      history: data.issueHistory ?? [],
     });
+    useDocumentStore.setState({ documents: data.documents ?? [] });
   },
 }));

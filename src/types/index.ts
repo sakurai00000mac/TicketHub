@@ -82,6 +82,16 @@ export interface IssueComment {
   updatedAt: number;
 }
 
+export interface IssueHistory {
+  id: string;
+  issueId: string;
+  field: string;           // 変更されたフィールド名
+  oldValue: string | null; // 変更前の値
+  newValue: string | null; // 変更後の値
+  changedBy: string;
+  createdAt: number;
+}
+
 // ============================================
 // Wikiページ（既存）
 // ============================================

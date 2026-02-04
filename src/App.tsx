@@ -7,7 +7,10 @@ import { IssueNewPage } from './pages/IssueNewPage';
 import { IssueDetailPage } from './pages/IssueDetailPage';
 import { BoardPage } from './pages/BoardPage';
 import { GanttPage } from './pages/GanttPage';
-import { DocumentsPage } from './pages/DocumentsPage';
+import { DocumentListPage } from './pages/DocumentListPage';
+import { DocumentNewPage } from './pages/DocumentNewPage';
+import { DocumentViewPage } from './pages/DocumentViewPage';
+import { DocumentEditPage } from './pages/DocumentEditPage';
 import { WikiPage } from './pages/WikiPage';
 import { PageView } from './pages/PageView';
 import { MarkdownEditor } from './components/Editor/MarkdownEditor';
@@ -36,7 +39,10 @@ export default function App() {
             <Route path="issues/:issueId" element={<IssueDetailPage />} />
             <Route path="board" element={<BoardPage />} />
             <Route path="gantt" element={<GanttPage />} />
-            <Route path="documents" element={<DocumentsPage />} />
+            <Route path="documents" element={<DocumentListPage />} />
+            <Route path="documents/new" element={<DocumentNewPage />} />
+            <Route path="documents/:documentId" element={<DocumentViewPage />} />
+            <Route path="documents/:documentId/edit" element={<DocumentEditPage />} />
             <Route path="wiki" element={<WikiPage />}>
               <Route index element={<WikiIndex />} />
               <Route path=":pageId" element={<PageView />} />

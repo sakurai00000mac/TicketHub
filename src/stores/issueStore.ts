@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { Issue, IssueComment } from '../types';
-import { loadIssues, saveIssues, loadIssueComments, saveIssueComments } from '../utils/storage';
+import type { Issue, IssueComment, IssueHistory } from '../types';
+import { loadIssues, saveIssues, loadIssueComments, saveIssueComments, loadIssueHistory, saveIssueHistory } from '../utils/storage';
 import { generateId } from '../utils/markdown';
 
 interface IssueState {
   issues: Issue[];
   comments: IssueComment[];
+  history: IssueHistory[];
 
   // Issue CRUD
   addIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'updatedAt'>) => string;
@@ -23,11 +24,13 @@ interface IssueState {
   getIssuesByStatus: (projectId: string, statusId: string) => Issue[];
   getChildIssues: (parentId: string) => Issue[];
   getIssueComments: (issueId: string) => IssueComment[];
+  getIssueHistory: (issueId: string) => IssueHistory[];
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: loadIssues(),
   comments: loadIssueComments(),
+  history: loadIssueHistory(),
 
   addIssue: (issueData) => {
     const id = generateId();
@@ -47,11 +50,48 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   updateIssue: (id, updates) => {
     set((state) => {
+      const oldIssue = state.issues.find((i) => i.id === id);
+      if (!oldIssue) return state;
+
+      const newHistory: IssueHistory[] = [];
+      const now = Date.now();
+      const changedBy = 'current-user'; // TODO: 実際のユーザーIDに置き換え
+
+      // フィールドごとの変更を記録
+      const trackField = (field: keyof Issue, displayName: string, formatter?: (val: any) => string) => {
+        if (updates[field] !== undefined && updates[field] !== oldIssue[field]) {
+          const format = formatter || ((v: any) => v?.toString() ?? '');
+          newHistory.push({
+            id: generateId(),
+            issueId: id,
+            field: displayName,
+            oldValue: format(oldIssue[field]),
+            newValue: format(updates[field]),
+            changedBy,
+            createdAt: now,
+          });
+        }
+      };
+
+      trackField('title', '件名');
+      trackField('description', '詳細');
+      trackField('typeId', '種別');
+      trackField('statusId', 'ステータス');
+      trackField('priority', '優先度');
+      trackField('assigneeId', '担当者');
+      trackField('parentId', '親課題');
+      trackField('startDate', '開始日', (v) => v ? new Date(v).toLocaleDateString('ja-JP') : '未設定');
+      trackField('dueDate', '期限', (v) => v ? new Date(v).toLocaleDateString('ja-JP') : '未設定');
+
       const issues = state.issues.map((i) =>
-        i.id === id ? { ...i, ...updates, updatedAt: Date.now() } : i
+        i.id === id ? { ...i, ...updates, updatedAt: now } : i
       );
+      const history = [...state.history, ...newHistory];
+
       saveIssues(issues);
-      return { issues };
+      saveIssueHistory(history);
+
+      return { issues, history };
     });
   },
 
@@ -69,9 +109,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     set((state) => {
       const issues = deleteRecursive(id, state.issues);
       const comments = state.comments.filter((c) => c.issueId !== id);
+      const history = state.history.filter((h) => h.issueId !== id);
       saveIssues(issues);
       saveIssueComments(comments);
-      return { issues, comments };
+      saveIssueHistory(history);
+      return { issues, comments, history };
     });
   },
 
@@ -82,9 +124,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       );
       const issues = state.issues.filter((i) => i.projectId !== projectId);
       const comments = state.comments.filter((c) => !projectIssueIds.has(c.issueId));
+      const history = state.history.filter((h) => !projectIssueIds.has(h.issueId));
       saveIssues(issues);
       saveIssueComments(comments);
-      return { issues, comments };
+      saveIssueHistory(history);
+      return { issues, comments, history };
     });
   },
 
@@ -142,5 +186,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     return get()
       .comments.filter((c) => c.issueId === issueId)
       .sort((a, b) => a.createdAt - b.createdAt);
+  },
+
+  getIssueHistory: (issueId) => {
+    return get()
+      .history.filter((h) => h.issueId === issueId)
+      .sort((a, b) => b.createdAt - a.createdAt); // 新しい順
   },
 }));

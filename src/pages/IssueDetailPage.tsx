@@ -20,7 +20,7 @@ function formatDateDisplay(ts: number | null): string {
 export function IssueDetailPage() {
   const { projectId, issueId } = useParams();
   const navigate = useNavigate();
-  const { issues, updateIssue, deleteIssue, getChildIssues, getProjectIssues } = useIssueStore();
+  const { issues, updateIssue, deleteIssue, getChildIssues, getProjectIssues, getIssueHistory } = useIssueStore();
   const { getProject } = useProjectStore();
 
   // 編集モード
@@ -60,7 +60,7 @@ export function IssueDetailPage() {
     return [id, ...children.flatMap((c) => getDescendantIds(c.id))];
   };
   const excludeIds = new Set(getDescendantIds(issue.id));
-  const parentCandidates = allIssues.filter((i) => !excludeIds.has(i.id));
+  const parentCandidates = allIssues.filter((i) => !excludeIds.has(i.id) && !i.parentId);
 
   const handleDelete = () => {
     if (window.confirm(`課題「${issue.title}」を削除しますか？子課題も全て削除されます。`)) {
@@ -89,7 +89,7 @@ export function IssueDetailPage() {
     <div className="issue-detail-page">
       {/* ヘッダー */}
       <div className="issue-detail-header">
-        <button className="btn btn-sm" onClick={() => navigate(`/projects/${projectId}/issues`)}>
+        <button className="btn btn-sm" onClick={() => navigate(-1)}>
           <FiArrowLeft /> 戻る
         </button>
         <div className="issue-detail-header-right">
@@ -209,6 +209,8 @@ export function IssueDetailPage() {
             <select
               value={issue.parentId ?? ''}
               onChange={(e) => updateIssue(issue.id, { parentId: e.target.value || null })}
+              disabled={childIssues.length > 0}
+              title={childIssues.length > 0 ? "子課題を持つ課題には親課題を設定できません" : ""}
             >
               <option value="">なし</option>
               {parentCandidates.map((i) => (
@@ -272,6 +274,45 @@ export function IssueDetailPage() {
           </div>
         </div>
       )}
+
+      {/* 変更履歴 */}
+      <div className="issue-detail-section">
+        <h3>変更履歴</h3>
+        {(() => {
+          const history = getIssueHistory(issue.id);
+          if (history.length === 0) {
+            return <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>変更履歴はありません</p>;
+          }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    borderLeft: '3px solid var(--color-primary)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <strong>{h.field}</strong>
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>
+                      {new Date(h.createdAt).toLocaleString('ja-JP')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary)' }}>
+                    <span style={{ textDecoration: 'line-through' }}>{h.oldValue || '(空)'}</span>
+                    <span>→</span>
+                    <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{h.newValue || '(空)'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
