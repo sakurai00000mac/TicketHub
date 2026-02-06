@@ -70,7 +70,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const project: Project = {
       id,
       name,
-      description: description || null,
       groupId: null,
       ownerId,
       memberIds: [ownerId],
@@ -82,7 +81,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       createdAt: Date.now(),
     };
 
-    await dbSet(ref(db, `projects/${id}`), project);
+    // Firebase doesn't accept undefined, so only add description if it exists
+    const projectData = description ? { ...project, description } : project;
+    await dbSet(ref(db, `projects/${id}`), projectData);
     return id;
   },
 
