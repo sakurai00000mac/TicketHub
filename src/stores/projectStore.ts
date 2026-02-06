@@ -70,7 +70,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const project: Project = {
       id,
       name,
-      groupId: null,
       ownerId,
       memberIds: [ownerId],
       inviteCode: generateInviteCode(),

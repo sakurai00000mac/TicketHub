@@ -36,11 +36,12 @@ export function IssuesPage() {
     setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  if (!projectId) return null;
+  const project = projectId ? getProject(projectId) : undefined;
+
+  if (!projectId || !project) return null;
 
   const issues = getProjectIssues(projectId);
   const filteredIssues = filterIssues(issues);
-  const project = getProject(projectId);
   const tree = buildTree(filteredIssues);
 
   const renderRow = (issue: Issue, depth: number, hasChildren: boolean) => {
@@ -138,7 +139,7 @@ export function IssuesPage() {
       </div>
 
       <IssueFilter
-        project={project!}
+        project={project}
         keyword={keyword}
         setKeyword={setKeyword}
         typeId={typeId}

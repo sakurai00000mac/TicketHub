@@ -40,7 +40,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  groupId: string | null;
+  groupId?: string;
   ownerId: string;
   memberIds: string[];
   inviteCode: string;
