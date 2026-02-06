@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIssueStore } from '../stores/issueStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useAuthStore } from '../stores/authStore';
 import { MarkdownPreview } from '../components/Editor/MarkdownPreview';
 import { FiArrowLeft, FiTrash2, FiEdit2, FiCheck, FiX } from 'react-icons/fi';
 import type { IssuePriority } from '../types';
@@ -20,6 +21,7 @@ function formatDateDisplay(ts: number | null): string {
 export function IssueDetailPage() {
   const { projectId, issueId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { issues, updateIssue, deleteIssue, getChildIssues, getProjectIssues, getIssueHistory } = useIssueStore();
   const { getProject } = useProjectStore();
 
@@ -62,23 +64,23 @@ export function IssueDetailPage() {
   const excludeIds = new Set(getDescendantIds(issue.id));
   const parentCandidates = allIssues.filter((i) => !excludeIds.has(i.id) && !i.parentId);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm(`課題「${issue.title}」を削除しますか？子課題も全て削除されます。`)) {
-      deleteIssue(issue.id);
+      await deleteIssue(issue.id, projectId!);
       navigate(`/projects/${projectId}/issues`);
     }
   };
 
-  const saveTitle = () => {
+  const saveTitle = async () => {
     if (titleDraft.trim() && titleDraft.trim() !== issue.title) {
-      updateIssue(issue.id, { title: titleDraft.trim() });
+      await updateIssue(issue.id, { title: titleDraft.trim() }, user?.id ?? '');
     }
     setEditingTitle(false);
   };
 
-  const saveDescription = () => {
+  const saveDescription = async () => {
     if (descDraft !== issue.description) {
-      updateIssue(issue.id, { description: descDraft });
+      await updateIssue(issue.id, { description: descDraft }, user?.id ?? '');
     }
     setEditingDesc(false);
   };
@@ -182,7 +184,7 @@ export function IssueDetailPage() {
         <div className="issue-props-panel">
           <div className="issue-props-field">
             <label>ステータス</label>
-            <select value={issue.statusId} onChange={(e) => updateIssue(issue.id, { statusId: e.target.value })}>
+            <select value={issue.statusId} onChange={(e) => updateIssue(issue.id, { statusId: e.target.value }, user?.id ?? '')}>
               {project.issueStatuses.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
@@ -190,7 +192,7 @@ export function IssueDetailPage() {
           </div>
           <div className="issue-props-field">
             <label>種別</label>
-            <select value={issue.typeId} onChange={(e) => updateIssue(issue.id, { typeId: e.target.value })}>
+            <select value={issue.typeId} onChange={(e) => updateIssue(issue.id, { typeId: e.target.value }, user?.id ?? '')}>
               {project.issueTypes.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -198,7 +200,7 @@ export function IssueDetailPage() {
           </div>
           <div className="issue-props-field">
             <label>優先度</label>
-            <select value={issue.priority} onChange={(e) => updateIssue(issue.id, { priority: e.target.value as IssuePriority })}>
+            <select value={issue.priority} onChange={(e) => updateIssue(issue.id, { priority: e.target.value as IssuePriority }, user?.id ?? '')}>
               <option value="high">高</option>
               <option value="medium">中</option>
               <option value="low">低</option>
@@ -208,7 +210,7 @@ export function IssueDetailPage() {
             <label>親課題</label>
             <select
               value={issue.parentId ?? ''}
-              onChange={(e) => updateIssue(issue.id, { parentId: e.target.value || null })}
+              onChange={(e) => updateIssue(issue.id, { parentId: e.target.value || null }, user?.id ?? '')}
               disabled={childIssues.length > 0}
               title={childIssues.length > 0 ? "子課題を持つ課題には親課題を設定できません" : ""}
             >
@@ -223,7 +225,7 @@ export function IssueDetailPage() {
             <input
               type="date"
               value={formatDateInput(issue.startDate)}
-              onChange={(e) => updateIssue(issue.id, { startDate: e.target.value ? new Date(e.target.value).getTime() : null })}
+              onChange={(e) => updateIssue(issue.id, { startDate: e.target.value ? new Date(e.target.value + 'T00:00:00').getTime() : null }, user?.id ?? '')}
             />
           </div>
           <div className="issue-props-field">
@@ -232,7 +234,7 @@ export function IssueDetailPage() {
               type="date"
               className={isOverdue ? 'overdue' : ''}
               value={formatDateInput(issue.dueDate)}
-              onChange={(e) => updateIssue(issue.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : null })}
+              onChange={(e) => updateIssue(issue.id, { dueDate: e.target.value ? new Date(e.target.value + 'T00:00:00').getTime() : null }, user?.id ?? '')}
             />
             {isOverdue && <span className="overdue-text">期限超過</span>}
           </div>

@@ -18,9 +18,9 @@ export function DocumentViewPage() {
     );
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm(`「${doc.title}」を削除しますか？`)) {
-      deleteDocument(doc.id);
+      await deleteDocument(doc.id, projectId);
       navigate(`/projects/${projectId}/documents`);
     }
   };

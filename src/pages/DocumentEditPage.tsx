@@ -32,20 +32,20 @@ export function DocumentEditPage() {
     }
   }, [projectId, documentId, navigate]);
 
-  const handleSave = useCallback(() => {
-    if (!doc) return;
+  const handleSave = useCallback(async () => {
+    if (!doc || !projectId) return;
     const tags = tagsInput
       .split(',')
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
-    updateDocument(doc.id, { title: title.trim() || '無題', content, tags });
-  }, [doc, title, content, tagsInput, updateDocument]);
+    await updateDocument(doc.id, projectId, { title: title.trim() || '無題', content, tags });
+  }, [doc, projectId, title, content, tagsInput, updateDocument]);
 
-  const handleDelete = useCallback(() => {
-    if (!doc) return;
+  const handleDelete = useCallback(async () => {
+    if (!doc || !projectId) return;
     if (window.confirm(`「${doc.title}」を削除しますか？`)) {
-      deleteDocument(doc.id);
-      if (projectId) navigate(`/projects/${projectId}/documents`);
+      await deleteDocument(doc.id, projectId);
+      navigate(`/projects/${projectId}/documents`);
     }
   }, [doc, deleteDocument, projectId, navigate]);
 

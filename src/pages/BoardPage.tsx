@@ -1,11 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIssueStore } from '../stores/issueStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useAuthStore } from '../stores/authStore';
 import { useIssueFilter } from '../hooks/useIssueFilter';
 import { IssueFilter } from '../components/common/IssueFilter';
 export function BoardPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { getIssuesByStatus, updateIssue } = useIssueStore();
   const { getProject } = useProjectStore();
   const {
@@ -26,11 +28,11 @@ export function BoardPage() {
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent, statusId: string) => {
+  const handleDrop = (e: React.DragEvent, newStatusId: string) => {
     e.preventDefault();
     const issueId = e.dataTransfer.getData('text/plain');
     if (issueId) {
-      updateIssue(issueId, { statusId });
+      updateIssue(issueId, { statusId: newStatusId }, user?.id ?? '');
     }
   };
 

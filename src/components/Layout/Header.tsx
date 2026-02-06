@@ -2,7 +2,8 @@ import { useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
-import { FiPlus, FiDownload, FiUpload, FiHome } from 'react-icons/fi';
+import { useAuthStore } from '../../stores/authStore';
+import { FiPlus, FiDownload, FiUpload, FiHome, FiLogOut } from 'react-icons/fi';
 import { exportToFile, importFromFile } from '../../utils/storage';
 
 export function Header() {
@@ -10,9 +11,15 @@ export function Header() {
   const { projectId } = useParams();
   const { projects } = useProjectStore();
   const { importAllData } = useUIStore();
+  const { user, signOut } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentProject = projects.find((p) => p.id === projectId);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,7 +39,7 @@ export function Header() {
     <header className="header">
       <Link to="/" className="header-title">
         <FiHome size={16} />
-        <h1>ProjectHub</h1>
+        <h1>TicketHub</h1>
       </Link>
 
       {currentProject && (
@@ -82,6 +89,18 @@ export function Header() {
           style={{ display: 'none' }}
         />
       </div>
+
+      {user && (
+        <div className="header-user">
+          {user.photoURL && (
+            <img src={user.photoURL} alt={user.displayName} className="header-user-avatar" />
+          )}
+          <span className="header-user-name">{user.displayName}</span>
+          <button className="btn-icon" onClick={handleSignOut} style={{ color: 'white' }} title="ログアウト">
+            <FiLogOut size={18} />
+          </button>
+        </div>
+      )}
     </header>
   );
 }

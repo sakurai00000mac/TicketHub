@@ -1,7 +1,11 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/Layout/Header';
 import { ProjectLayout } from './components/Layout/ProjectLayout';
+import ProtectedRoute from './components/ProtectedRoute';
 import { ProjectList } from './pages/ProjectList';
+import LoginPage from './pages/LoginPage';
+import JoinProjectPage from './pages/JoinProjectPage';
 import { IssuesPage } from './pages/IssuesPage';
 import { IssueNewPage } from './pages/IssueNewPage';
 import { IssueDetailPage } from './pages/IssueDetailPage';
@@ -15,6 +19,8 @@ import { WikiPage } from './pages/WikiPage';
 import { PageView } from './pages/PageView';
 import { MarkdownEditor } from './components/Editor/MarkdownEditor';
 import { SettingsPage } from './pages/SettingsPage';
+import { useAuthStore } from './stores/authStore';
+import { useProjectStore } from './stores/projectStore';
 
 function WikiIndex() {
   return (
@@ -26,13 +32,47 @@ function WikiIndex() {
 }
 
 export default function App() {
+  const initialize = useAuthStore((state) => state.initialize);
+  const user = useAuthStore((state) => state.user);
+  const subscribeToProjects = useProjectStore((state) => state.subscribeToProjects);
+
+  useEffect(() => {
+    const unsubscribe = initialize();
+    return () => unsubscribe();
+  }, [initialize]);
+
+  useEffect(() => {
+    if (user) {
+      subscribeToProjects(user.id);
+    }
+  }, [user, subscribeToProjects]);
+
   return (
     <BrowserRouter>
       <div className="app-layout">
         <Routes>
-          <Route path="/" element={<><Header /><main className="main-content"><ProjectList /></main></>} />
+          <Route path="/login" element={<LoginPage />} />
 
-          <Route path="/projects/:projectId" element={<><Header /><div className="app-body"><ProjectLayout /></div></>}>
+          <Route path="/join" element={
+            <ProtectedRoute>
+              <Header />
+              <main className="main-content"><JoinProjectPage /></main>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Header />
+              <main className="main-content"><ProjectList /></main>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/projects/:projectId" element={
+            <ProtectedRoute>
+              <Header />
+              <div className="app-body"><ProjectLayout /></div>
+            </ProtectedRoute>
+          }>
             <Route index element={<Navigate to="issues" replace />} />
             <Route path="issues" element={<IssuesPage />} />
             <Route path="issues/new" element={<IssueNewPage />} />

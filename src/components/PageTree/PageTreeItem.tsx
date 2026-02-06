@@ -59,12 +59,12 @@ export function PageTreeItem({ page, onNewPage }: PageTreeItemProps) {
 
     const pos = getDropPosition(e);
     if (pos === 'before') {
-      movePage(draggedId, page.parentId, page.order);
+      movePage(draggedId, page.projectId, page.parentId, page.order);
     } else if (pos === 'after') {
-      movePage(draggedId, page.parentId, page.order + 1);
+      movePage(draggedId, page.projectId, page.parentId, page.order + 1);
     } else if (pos === 'inside') {
       const childCount = getChildPages(page.id, page.projectId).length;
-      movePage(draggedId, page.id, childCount);
+      movePage(draggedId, page.projectId, page.id, childCount);
       setExpanded(true);
     }
     setDropPos(null);

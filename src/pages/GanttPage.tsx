@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIssueStore } from '../stores/issueStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useAuthStore } from '../stores/authStore';
 import { useIssueFilter } from '../hooks/useIssueFilter';
 import { IssueFilter } from '../components/common/IssueFilter';
 import type { Issue } from '../types';
@@ -147,6 +148,7 @@ function flattenIssues(issues: Issue[]): FlatItem[] {
 export function GanttPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { getProjectIssues, updateIssue } = useIssueStore();
   const { getProject } = useProjectStore();
   const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -272,20 +274,21 @@ export function GanttPage() {
         const daysDelta = Math.round(dx / cellWidth);
         if (daysDelta === 0) return;
 
+        const userId = user?.id ?? '';
         if (type === 'move') {
           updateIssue(issueId, {
             startDate: addDays(issue.startDate!, daysDelta),
             dueDate: addDays(issue.dueDate!, daysDelta),
-          });
+          }, userId);
         } else if (type === 'resize-start') {
           const newStart = addDays(issue.startDate!, daysDelta);
           if (newStart <= issue.dueDate!) {
-            updateIssue(issueId, { startDate: newStart });
+            updateIssue(issueId, { startDate: newStart }, userId);
           }
         } else if (type === 'resize-end') {
           const newEnd = addDays(issue.dueDate!, daysDelta);
           if (newEnd >= issue.startDate!) {
-            updateIssue(issueId, { dueDate: newEnd });
+            updateIssue(issueId, { dueDate: newEnd }, userId);
           }
         }
       };
@@ -303,7 +306,7 @@ export function GanttPage() {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [allIssues, cellWidth, updateIssue]
+    [allIssues, cellWidth, updateIssue, user]
   );
 
   return (

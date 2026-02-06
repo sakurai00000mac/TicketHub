@@ -32,17 +32,17 @@ export function MarkdownEditor() {
     }
   }, [projectId, pageId, navigate]);
 
-  const handleSave = useCallback(() => {
-    if (!page) return;
-    updatePage(page.id, { title: title.trim() || '無題', content });
+  const handleSave = useCallback(async () => {
+    if (!page || !projectId) return;
+    await updatePage(page.id, projectId, { title: title.trim() || '無題', content });
     handleClose();
-  }, [page, title, content, updatePage, handleClose]);
+  }, [page, projectId, title, content, updatePage, handleClose]);
 
-  const handleDelete = useCallback(() => {
-    if (!page) return;
+  const handleDelete = useCallback(async () => {
+    if (!page || !projectId) return;
     if (window.confirm(`「${page.title}」を削除しますか？子ページも削除されます。`)) {
-      deletePage(page.id);
-      if (projectId) navigate(`/projects/${projectId}/wiki`);
+      await deletePage(page.id, projectId);
+      navigate(`/projects/${projectId}/wiki`);
     }
   }, [page, deletePage, projectId, navigate]);
 

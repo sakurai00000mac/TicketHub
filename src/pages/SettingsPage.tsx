@@ -4,14 +4,16 @@ import { useProjectStore } from '../stores/projectStore';
 import { useWikiStore } from '../stores/wikiStore';
 import { useIssueStore } from '../stores/issueStore';
 import { useDocumentStore } from '../stores/documentStore';
+import { useAuthStore } from '../stores/authStore';
 import { generateId } from '../utils/markdown';
 import type { IssueStatus, IssueType } from '../types';
-import { FiPlus, FiTrash2, FiMenu } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiMenu, FiCopy, FiRefreshCw } from 'react-icons/fi';
 
 export function SettingsPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { getProject, updateProject, deleteProject } = useProjectStore();
+  const { user } = useAuthStore();
+  const { getProject, updateProject, deleteProject, regenerateInviteCode } = useProjectStore();
   const { deleteProjectPages } = useWikiStore();
   const { deleteProjectIssues, getProjectIssues } = useIssueStore();
   const { deleteProjectDocuments } = useDocumentStore();
@@ -26,26 +28,48 @@ export function SettingsPage() {
     () => project?.issueTypes ? [...project.issueTypes] : []
   );
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   if (!project || !projectId) return null;
 
   const issues = getProjectIssues(projectId);
+  const isOwner = user?.id === project.ownerId;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
-    updateProject(projectId, {
+    await updateProject(projectId, {
       name: name.trim(),
       description: description.trim() || undefined,
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    if (!isOwner) {
+      alert('プロジェクトの削除はオーナーのみ可能です');
+      return;
+    }
     if (window.confirm(`プロジェクト「${project.name}」を削除しますか？すべてのデータが失われます。`)) {
       deleteProjectIssues(projectId);
       deleteProjectPages(projectId);
       deleteProjectDocuments(projectId);
-      deleteProject(projectId);
+      await deleteProject(projectId);
       navigate('/');
+    }
+  };
+
+  const handleCopyInviteCode = () => {
+    navigator.clipboard.writeText(project.inviteCode);
+    alert('招待コードをコピーしました');
+  };
+
+  const handleRegenerateInviteCode = async () => {
+    if (!isOwner) return;
+    if (!window.confirm('招待コードを再生成しますか？古いコードは無効になります。')) return;
+    setRegenerating(true);
+    try {
+      await regenerateInviteCode(projectId);
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -71,8 +95,8 @@ export function SettingsPage() {
     setEditStatuses((prev) => prev.filter((s) => s.id !== id).map((s, i) => ({ ...s, order: i })));
   };
 
-  const saveStatuses = () => {
-    updateProject(projectId, { issueStatuses: editStatuses.map((s, i) => ({ ...s, order: i })) });
+  const saveStatuses = async () => {
+    await updateProject(projectId, { issueStatuses: editStatuses.map((s, i) => ({ ...s, order: i })) });
   };
 
   const handleStatusDragStart = (idx: number) => {
@@ -117,8 +141,8 @@ export function SettingsPage() {
     setEditTypes((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const saveTypes = () => {
-    updateProject(projectId, { issueTypes: editTypes });
+  const saveTypes = async () => {
+    await updateProject(projectId, { issueTypes: editTypes });
   };
 
   return (
@@ -147,6 +171,32 @@ export function SettingsPage() {
 
       <div style={{ display: 'flex', gap: '8px', marginTop: '24px' }}>
         <button className="btn btn-primary" onClick={handleSave}>保存</button>
+      </div>
+
+      {/* 招待コード */}
+      <hr style={{ margin: '32px 0', borderColor: 'var(--color-border)' }} />
+      <div className="settings-section">
+        <h3>招待コード</h3>
+        <p>このコードを共有してメンバーをプロジェクトに招待できます。</p>
+        <div className="invite-code-display">
+          <code className="invite-code">{project.inviteCode}</code>
+          <button className="btn btn-sm" onClick={handleCopyInviteCode} title="コピー">
+            <FiCopy /> コピー
+          </button>
+          {isOwner && (
+            <button
+              className="btn btn-sm"
+              onClick={handleRegenerateInviteCode}
+              disabled={regenerating}
+              title="再生成"
+            >
+              <FiRefreshCw /> {regenerating ? '生成中...' : '再生成'}
+            </button>
+          )}
+        </div>
+        <small style={{ color: 'var(--color-text-secondary)' }}>
+          メンバーは「参加する」ボタンからこのコードを入力して参加できます
+        </small>
       </div>
 
       {/* ステータス設定 */}

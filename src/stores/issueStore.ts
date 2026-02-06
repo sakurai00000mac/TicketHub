@@ -1,23 +1,29 @@
 import { create } from 'zustand';
+import { ref, set as dbSet, onValue, update, remove } from 'firebase/database';
 import type { Issue, IssueComment, IssueHistory } from '../types';
-import { loadIssues, saveIssues, loadIssueComments, saveIssueComments, loadIssueHistory, saveIssueHistory } from '../utils/storage';
+import { db } from '../config/firebase';
 import { generateId } from '../utils/markdown';
 
 interface IssueState {
   issues: Issue[];
   comments: IssueComment[];
   history: IssueHistory[];
+  subscriptions: Map<string, () => void>;
+
+  // Subscriptions
+  subscribeToProject: (projectId: string) => void;
+  unsubscribeFromProject: (projectId: string) => void;
 
   // Issue CRUD
-  addIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'updatedAt'>) => string;
-  updateIssue: (id: string, updates: Partial<Issue>) => void;
-  deleteIssue: (id: string) => void;
+  addIssue: (issue: Omit<Issue, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateIssue: (id: string, updates: Partial<Issue>, changedBy: string) => Promise<void>;
+  deleteIssue: (id: string, projectId: string) => Promise<void>;
   deleteProjectIssues: (projectId: string) => void;
 
   // Comment CRUD
-  addComment: (issueId: string, content: string, authorId: string) => string;
-  updateComment: (id: string, content: string) => void;
-  deleteComment: (id: string) => void;
+  addComment: (projectId: string, issueId: string, content: string, authorId: string) => Promise<string>;
+  updateComment: (projectId: string, id: string, content: string) => Promise<void>;
+  deleteComment: (projectId: string, id: string) => Promise<void>;
 
   // Queries
   getProjectIssues: (projectId: string) => Issue[];
@@ -28,11 +34,98 @@ interface IssueState {
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
-  issues: loadIssues(),
-  comments: loadIssueComments(),
-  history: loadIssueHistory(),
+  issues: [],
+  comments: [],
+  history: [],
+  subscriptions: new Map(),
 
-  addIssue: (issueData) => {
+  subscribeToProject: (projectId: string) => {
+    const { subscriptions } = get();
+    if (subscriptions.has(projectId)) return;
+
+    const unsubscribers: (() => void)[] = [];
+
+    // Issues
+    const issuesRef = ref(db, `projects/${projectId}/issues`);
+    const unsubIssues = onValue(issuesRef, (snapshot) => {
+      const projectIssues: Issue[] = [];
+      snapshot.forEach((child) => {
+        projectIssues.push({ ...child.val(), id: child.key! });
+      });
+      set((state) => ({
+        issues: [
+          ...state.issues.filter((i) => i.projectId !== projectId),
+          ...projectIssues,
+        ],
+      }));
+    });
+    unsubscribers.push(unsubIssues);
+
+    // Comments
+    const commentsRef = ref(db, `projects/${projectId}/comments`);
+    const unsubComments = onValue(commentsRef, (snapshot) => {
+      const projectComments: IssueComment[] = [];
+      snapshot.forEach((child) => {
+        projectComments.push({ ...child.val(), id: child.key! });
+      });
+      set((state) => {
+        const projectIssueIds = new Set(
+          state.issues.filter((i) => i.projectId === projectId).map((i) => i.id)
+        );
+        return {
+          comments: [
+            ...state.comments.filter((c) => !projectIssueIds.has(c.issueId)),
+            ...projectComments,
+          ],
+        };
+      });
+    });
+    unsubscribers.push(unsubComments);
+
+    // History
+    const historyRef = ref(db, `projects/${projectId}/history`);
+    const unsubHistory = onValue(historyRef, (snapshot) => {
+      const projectHistory: IssueHistory[] = [];
+      snapshot.forEach((child) => {
+        projectHistory.push({ ...child.val(), id: child.key! });
+      });
+      set((state) => {
+        const projectIssueIds = new Set(
+          state.issues.filter((i) => i.projectId === projectId).map((i) => i.id)
+        );
+        return {
+          history: [
+            ...state.history.filter((h) => !projectIssueIds.has(h.issueId)),
+            ...projectHistory,
+          ],
+        };
+      });
+    });
+    unsubscribers.push(unsubHistory);
+
+    const unsubscribe = () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+
+    set((state) => ({
+      subscriptions: new Map(state.subscriptions).set(projectId, unsubscribe),
+    }));
+  },
+
+  unsubscribeFromProject: (projectId: string) => {
+    const { subscriptions } = get();
+    const unsubscribe = subscriptions.get(projectId);
+    if (unsubscribe) {
+      unsubscribe();
+      set((state) => {
+        const newSubs = new Map(state.subscriptions);
+        newSubs.delete(projectId);
+        return { subscriptions: newSubs };
+      });
+    }
+  },
+
+  addIssue: async (issueData) => {
     const id = generateId();
     const issue: Issue = {
       ...issueData,
@@ -40,99 +133,101 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    set((state) => {
-      const issues = [...state.issues, issue];
-      saveIssues(issues);
-      return { issues };
-    });
+    await dbSet(ref(db, `projects/${issueData.projectId}/issues/${id}`), issue);
     return id;
   },
 
-  updateIssue: (id, updates) => {
-    set((state) => {
-      const oldIssue = state.issues.find((i) => i.id === id);
-      if (!oldIssue) return state;
+  updateIssue: async (id, updates, changedBy) => {
+    const issue = get().issues.find((i) => i.id === id);
+    if (!issue) return;
 
-      const newHistory: IssueHistory[] = [];
-      const now = Date.now();
-      const changedBy = 'current-user'; // TODO: 実際のユーザーIDに置き換え
+    const now = Date.now();
+    const historyEntries: IssueHistory[] = [];
 
-      // フィールドごとの変更を記録
-      const trackField = (field: keyof Issue, displayName: string, formatter?: (val: any) => string) => {
-        if (updates[field] !== undefined && updates[field] !== oldIssue[field]) {
-          const format = formatter || ((v: any) => v?.toString() ?? '');
-          newHistory.push({
-            id: generateId(),
-            issueId: id,
-            field: displayName,
-            oldValue: format(oldIssue[field]),
-            newValue: format(updates[field]),
-            changedBy,
-            createdAt: now,
-          });
-        }
-      };
-
-      trackField('title', '件名');
-      trackField('description', '詳細');
-      trackField('typeId', '種別');
-      trackField('statusId', 'ステータス');
-      trackField('priority', '優先度');
-      trackField('assigneeId', '担当者');
-      trackField('parentId', '親課題');
-      trackField('startDate', '開始日', (v) => v ? new Date(v).toLocaleDateString('ja-JP') : '未設定');
-      trackField('dueDate', '期限', (v) => v ? new Date(v).toLocaleDateString('ja-JP') : '未設定');
-
-      const issues = state.issues.map((i) =>
-        i.id === id ? { ...i, ...updates, updatedAt: now } : i
-      );
-      const history = [...state.history, ...newHistory];
-
-      saveIssues(issues);
-      saveIssueHistory(history);
-
-      return { issues, history };
-    });
-  },
-
-  deleteIssue: (id) => {
-    // 子課題も再帰的に削除
-    const deleteRecursive = (issueId: string, allIssues: Issue[]): Issue[] => {
-      const children = allIssues.filter((i) => i.parentId === issueId);
-      let remaining = allIssues.filter((i) => i.id !== issueId);
-      for (const child of children) {
-        remaining = deleteRecursive(child.id, remaining);
+    // Track changes
+    const trackField = (field: keyof Issue, displayName: string, formatter?: (val: unknown) => string) => {
+      if (updates[field] !== undefined && updates[field] !== issue[field]) {
+        const format = formatter || ((v: unknown) => v?.toString() ?? '');
+        historyEntries.push({
+          id: generateId(),
+          issueId: id,
+          field: displayName,
+          oldValue: format(issue[field]),
+          newValue: format(updates[field]),
+          changedBy,
+          createdAt: now,
+        });
       }
-      return remaining;
     };
 
-    set((state) => {
-      const issues = deleteRecursive(id, state.issues);
-      const comments = state.comments.filter((c) => c.issueId !== id);
-      const history = state.history.filter((h) => h.issueId !== id);
-      saveIssues(issues);
-      saveIssueComments(comments);
-      saveIssueHistory(history);
-      return { issues, comments, history };
+    trackField('title', '件名');
+    trackField('description', '詳細');
+    trackField('typeId', '種別');
+    trackField('statusId', 'ステータス');
+    trackField('priority', '優先度');
+    trackField('assigneeId', '担当者');
+    trackField('parentId', '親課題');
+    trackField('startDate', '開始日', (v) => v ? new Date(v as number).toLocaleDateString('ja-JP') : '未設定');
+    trackField('dueDate', '期限', (v) => v ? new Date(v as number).toLocaleDateString('ja-JP') : '未設定');
+
+    // Update issue
+    await update(ref(db, `projects/${issue.projectId}/issues/${id}`), {
+      ...updates,
+      updatedAt: now,
     });
+
+    // Add history entries
+    for (const entry of historyEntries) {
+      await dbSet(ref(db, `projects/${issue.projectId}/history/${entry.id}`), entry);
+    }
+  },
+
+  deleteIssue: async (id, projectId) => {
+    const { issues, comments, history } = get();
+
+    // Find all child issues recursively
+    const findAllChildren = (parentId: string): string[] => {
+      const children = issues.filter((i) => i.parentId === parentId);
+      return children.flatMap((c) => [c.id, ...findAllChildren(c.id)]);
+    };
+
+    const idsToDelete = [id, ...findAllChildren(id)];
+
+    // Delete issues
+    for (const issueId of idsToDelete) {
+      await remove(ref(db, `projects/${projectId}/issues/${issueId}`));
+    }
+
+    // Delete related comments
+    const commentsToDelete = comments.filter((c) => idsToDelete.includes(c.issueId));
+    for (const comment of commentsToDelete) {
+      await remove(ref(db, `projects/${projectId}/comments/${comment.id}`));
+    }
+
+    // Delete related history
+    const historyToDelete = history.filter((h) => idsToDelete.includes(h.issueId));
+    for (const entry of historyToDelete) {
+      await remove(ref(db, `projects/${projectId}/history/${entry.id}`));
+    }
   },
 
   deleteProjectIssues: (projectId) => {
-    set((state) => {
-      const projectIssueIds = new Set(
-        state.issues.filter((i) => i.projectId === projectId).map((i) => i.id)
-      );
-      const issues = state.issues.filter((i) => i.projectId !== projectId);
-      const comments = state.comments.filter((c) => !projectIssueIds.has(c.issueId));
-      const history = state.history.filter((h) => !projectIssueIds.has(h.issueId));
-      saveIssues(issues);
-      saveIssueComments(comments);
-      saveIssueHistory(history);
-      return { issues, comments, history };
-    });
+    // This will be handled by deleting the project itself
+    // The realtime listener will automatically update the state
+    set((state) => ({
+      issues: state.issues.filter((i) => i.projectId !== projectId),
+      comments: state.comments.filter((c) => {
+        const issue = state.issues.find((i) => i.id === c.issueId);
+        return issue?.projectId !== projectId;
+      }),
+      history: state.history.filter((h) => {
+        const issue = state.issues.find((i) => i.id === h.issueId);
+        return issue?.projectId !== projectId;
+      }),
+    }));
   },
 
-  addComment: (issueId, content, authorId) => {
+  addComment: async (projectId, issueId, content, authorId) => {
     const id = generateId();
     const comment: IssueComment = {
       id,
@@ -142,30 +237,19 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    set((state) => {
-      const comments = [...state.comments, comment];
-      saveIssueComments(comments);
-      return { comments };
-    });
+    await dbSet(ref(db, `projects/${projectId}/comments/${id}`), comment);
     return id;
   },
 
-  updateComment: (id, content) => {
-    set((state) => {
-      const comments = state.comments.map((c) =>
-        c.id === id ? { ...c, content, updatedAt: Date.now() } : c
-      );
-      saveIssueComments(comments);
-      return { comments };
+  updateComment: async (projectId, id, content) => {
+    await update(ref(db, `projects/${projectId}/comments/${id}`), {
+      content,
+      updatedAt: Date.now(),
     });
   },
 
-  deleteComment: (id) => {
-    set((state) => {
-      const comments = state.comments.filter((c) => c.id !== id);
-      saveIssueComments(comments);
-      return { comments };
-    });
+  deleteComment: async (projectId, id) => {
+    await remove(ref(db, `projects/${projectId}/comments/${id}`));
   },
 
   getProjectIssues: (projectId) => {
@@ -191,6 +275,6 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   getIssueHistory: (issueId) => {
     return get()
       .history.filter((h) => h.issueId === issueId)
-      .sort((a, b) => b.createdAt - a.createdAt); // 新しい順
+      .sort((a, b) => b.createdAt - a.createdAt);
   },
 }));

@@ -1,14 +1,19 @@
 import { create } from 'zustand';
+import { ref, set as dbSet, onValue, update, remove } from 'firebase/database';
 import type { Document } from '../types';
-import { loadDocuments, saveDocuments } from '../utils/storage';
+import { db } from '../config/firebase';
 import { generateId } from '../utils/markdown';
 
 interface DocumentState {
   documents: Document[];
+  subscriptions: Map<string, () => void>;
 
-  addDocument: (doc: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>) => string;
-  updateDocument: (id: string, updates: Partial<Pick<Document, 'title' | 'content' | 'tags'>>) => void;
-  deleteDocument: (id: string) => void;
+  subscribeToProject: (projectId: string) => void;
+  unsubscribeFromProject: (projectId: string) => void;
+
+  addDocument: (doc: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateDocument: (id: string, projectId: string, updates: Partial<Pick<Document, 'title' | 'content' | 'tags'>>) => Promise<void>;
+  deleteDocument: (id: string, projectId: string) => Promise<void>;
   deleteProjectDocuments: (projectId: string) => void;
 
   getProjectDocuments: (projectId: string) => Document[];
@@ -16,9 +21,46 @@ interface DocumentState {
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
-  documents: loadDocuments(),
+  documents: [],
+  subscriptions: new Map(),
 
-  addDocument: (docData) => {
+  subscribeToProject: (projectId: string) => {
+    const { subscriptions } = get();
+    if (subscriptions.has(projectId)) return;
+
+    const docsRef = ref(db, `projects/${projectId}/documents`);
+    const unsubscribe = onValue(docsRef, (snapshot) => {
+      const projectDocs: Document[] = [];
+      snapshot.forEach((child) => {
+        projectDocs.push({ ...child.val(), id: child.key! });
+      });
+      set((state) => ({
+        documents: [
+          ...state.documents.filter((d) => d.projectId !== projectId),
+          ...projectDocs,
+        ],
+      }));
+    });
+
+    set((state) => ({
+      subscriptions: new Map(state.subscriptions).set(projectId, unsubscribe),
+    }));
+  },
+
+  unsubscribeFromProject: (projectId: string) => {
+    const { subscriptions } = get();
+    const unsubscribe = subscriptions.get(projectId);
+    if (unsubscribe) {
+      unsubscribe();
+      set((state) => {
+        const newSubs = new Map(state.subscriptions);
+        newSubs.delete(projectId);
+        return { subscriptions: newSubs };
+      });
+    }
+  },
+
+  addDocument: async (docData) => {
     const id = generateId();
     const doc: Document = {
       ...docData,
@@ -26,38 +68,25 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    set((state) => {
-      const documents = [...state.documents, doc];
-      saveDocuments(documents);
-      return { documents };
-    });
+    await dbSet(ref(db, `projects/${docData.projectId}/documents/${id}`), doc);
     return id;
   },
 
-  updateDocument: (id, updates) => {
-    set((state) => {
-      const documents = state.documents.map((d) =>
-        d.id === id ? { ...d, ...updates, updatedAt: Date.now() } : d
-      );
-      saveDocuments(documents);
-      return { documents };
+  updateDocument: async (id, projectId, updates) => {
+    await update(ref(db, `projects/${projectId}/documents/${id}`), {
+      ...updates,
+      updatedAt: Date.now(),
     });
   },
 
-  deleteDocument: (id) => {
-    set((state) => {
-      const documents = state.documents.filter((d) => d.id !== id);
-      saveDocuments(documents);
-      return { documents };
-    });
+  deleteDocument: async (id, projectId) => {
+    await remove(ref(db, `projects/${projectId}/documents/${id}`));
   },
 
   deleteProjectDocuments: (projectId) => {
-    set((state) => {
-      const documents = state.documents.filter((d) => d.projectId !== projectId);
-      saveDocuments(documents);
-      return { documents };
-    });
+    set((state) => ({
+      documents: state.documents.filter((d) => d.projectId !== projectId),
+    }));
   },
 
   getProjectDocuments: (projectId) => {

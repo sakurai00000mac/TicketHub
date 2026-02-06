@@ -41,6 +41,9 @@ export interface Project {
   name: string;
   description?: string;
   groupId: string | null;
+  ownerId: string;
+  memberIds: string[];
+  inviteCode: string;
   issueStatuses: IssueStatus[];
   issueTypes: IssueType[];
   issueCounter: number;
